@@ -8,22 +8,29 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// ---------------- Twilio Credentials (hardcoded) ----------------
-const TWILIO_ACCOUNT_SID = "ACf3c0da9bfbfabfc2f752d747e4c5033e";
-const TWILIO_AUTH_TOKEN = "380e0772f7b1f046e613cfbef37bd94f";
-const TWILIO_API_KEY_SID = "SK5a268a3513b48328ffb9646779d756e5";
-const TWILIO_API_KEY_SECRET = "OHoeseoLUqY4fX2G108tuBXZlThDnOlu";
-const TWIML_APP_SID = "AP300fccf8cbc582680c4098528b607713";
-const TWILIO_NUMBER = "+16187034601";
-const PORT = 5006;
+// ---------------- Twilio Credentials from Environment Variables ----------------
+const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID || "";
+const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN || "";
+const TWILIO_API_KEY_SID = process.env.TWILIO_API_KEY_SID || "";
+const TWILIO_API_KEY_SECRET = process.env.TWILIO_API_KEY_SECRET || "";
+const TWIML_APP_SID = process.env.TWIML_APP_SID || "";
+const TWILIO_NUMBER = process.env.TWILIO_NUMBER || "";
 
-// Twilio client for REST API (Numbers & SMS)
+// Check credentials
+if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN) {
+  console.error("❌ Twilio credentials are missing! Please set them in environment variables.");
+}
+
+// Use port from Railway
+const PORT = process.env.PORT || 5006;
+
+// Twilio client
 const client = twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
 
 // ---------------- Number Search ----------------
 app.get("/api/numbers/search", async (req, res) => {
   try {
-    let { areaCode = "618", limit = 5 } = req.query;
+    const { areaCode = "618", limit = 5 } = req.query;
     const numericLimit = parseInt(limit, 10);
     if (isNaN(numericLimit) || numericLimit <= 0) {
       return res.status(400).json({ error: "Limit must be a positive integer" });
@@ -35,12 +42,10 @@ app.get("/api/numbers/search", async (req, res) => {
     });
 
     res.json(
-      numbers.map((n) => ({
-        phoneNumber: n.phoneNumber,
-        friendlyName: n.friendlyName,
-      }))
+      numbers.map((n) => ({ phoneNumber: n.phoneNumber, friendlyName: n.friendlyName }))
     );
   } catch (error) {
+    console.error("❌ Number search error:", error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -49,21 +54,13 @@ app.get("/api/numbers/search", async (req, res) => {
 let purchasedNumbers = [];
 app.post("/api/numbers/purchase", (req, res) => {
   const { phoneNumber } = req.body;
-  if (!phoneNumber) {
-    return res.status(400).json({ success: false, message: "Phone number is required" });
-  }
+  if (!phoneNumber) return res.status(400).json({ success: false, message: "Phone number is required" });
 
   if (!purchasedNumbers.includes(phoneNumber)) {
     purchasedNumbers.push(phoneNumber);
-    return res.json({
-      success: true,
-      message: `Number ${phoneNumber} purchased (simulated)`,
-    });
+    return res.json({ success: true, message: `Number ${phoneNumber} purchased (simulated)` });
   } else {
-    return res.json({
-      success: false,
-      message: `Number ${phoneNumber} already purchased`,
-    });
+    return res.json({ success: false, message: `Number ${phoneNumber} already purchased` });
   }
 });
 
@@ -71,17 +68,9 @@ app.post("/api/numbers/purchase", (req, res) => {
 app.post("/api/send-sms", async (req, res) => {
   try {
     const { to, message } = req.body;
+    if (!to || !message) return res.status(400).json({ error: "Recipient number and message are required" });
 
-    if (!to || !message) {
-      return res.status(400).json({ error: "Recipient number and message are required" });
-    }
-
-    const sms = await client.messages.create({
-      body: message,
-      from: TWILIO_NUMBER,
-      to,
-    });
-
+    const sms = await client.messages.create({ body: message, from: TWILIO_NUMBER, to });
     res.json({ success: true, sid: sms.sid });
   } catch (error) {
     console.error("❌ SMS Error:", error);
@@ -95,16 +84,17 @@ app.get("/api/receive-sms", async (req, res) => {
     const limit = parseInt(req.query.limit, 10) || 10;
     const messages = await client.messages.list({ limit });
 
-    const formattedMessages = messages.map((msg) => ({
-      sid: msg.sid,
-      from: msg.from,
-      to: msg.to,
-      body: msg.body,
-      status: msg.status,
-      dateSent: msg.dateSent,
-    }));
-
-    res.json({ success: true, messages: formattedMessages });
+    res.json({
+      success: true,
+      messages: messages.map(msg => ({
+        sid: msg.sid,
+        from: msg.from,
+        to: msg.to,
+        body: msg.body,
+        status: msg.status,
+        dateSent: msg.dateSent,
+      }))
+    });
   } catch (error) {
     console.error("❌ Error fetching messages:", error);
     res.status(500).json({ success: false, error: error.message });
@@ -125,11 +115,7 @@ app.get("/api/voice/token-web-rtc", (req, res) => {
       { identity }
     );
 
-    const voiceGrant = new VoiceGrant({
-      outgoingApplicationSid: TWIML_APP_SID,
-      incomingAllow: true,
-    });
-
+    const voiceGrant = new VoiceGrant({ outgoingApplicationSid: TWIML_APP_SID, incomingAllow: true });
     token.addGrant(voiceGrant);
 
     res.json({ success: true, identity, token: token.toJwt() });
@@ -143,4 +129,4 @@ app.get("/api/voice/token-web-rtc", (req, res) => {
 app.get("/", (req, res) => res.send("Backend is running"));
 
 // ---------------- Start Server ----------------
-app.listen(PORT, () => console.log(`✅ Backend running on http://localhost:${PORT}`));
+app.listen(PORT, () => console.log(`✅ Backend running on port ${PORT}`));
