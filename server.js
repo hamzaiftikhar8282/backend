@@ -130,3 +130,4 @@ app.get("/", (req, res) => res.send("Backend is running"));
 
 // ---------------- Start Server ----------------
 app.listen(PORT, () => console.log(`✅ Backend running on port ${PORT}`));
+
