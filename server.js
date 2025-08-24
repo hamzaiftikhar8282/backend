@@ -2,7 +2,8 @@ import express from "express";
 import cors from "cors";
 import twilio from "twilio";
 import { v4 as uuidv4 } from "uuid";
-
+import dotenv from "dotenv";
+dotenv.config(); // load .env
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -130,4 +131,3 @@ app.get("/", (req, res) => res.send("Backend is running"));
 
 // ---------------- Start Server ----------------
 app.listen(PORT, () => console.log(`✅ Backend running on port ${PORT}`));
-
